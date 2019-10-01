@@ -1,4 +1,7 @@
-import random
+import argparse
+import urllib.request
+import csv
+import codecs
 
 class Queue:
     def __init__(self):
@@ -9,7 +12,7 @@ class Queue:
         return self.items == []
 
     def enqueue(self, item):
-        self.items.insert(0,item)
+        self.items.insert(0, item)
 
     def dequeue(self):
         return self.items.pop()
@@ -18,20 +21,24 @@ class Queue:
         return len(self.items)
 
 class Server:
-    # The server class tracks if it has a task
     def __init__(self):
         self.current_task = None
-        self.time_remaining = 0
+        self.total_time_counter = 0
+        self.last_execution_time = 0
 
-    def tick(self):
-        #print('tic')
+    def get_total_time_counter(self):
+        return self.total_time_counter
+
+    def work(self, new_task, last_execution_time):
         if self.current_task != None:
-            self.time_remaining = self.time_remaining - 1
-            if self.time_remaining <= 0:
-                print(f"Setting current task to NONE!!!! {self.time_remaining}")
-                self.current_task = None
-        else:
-            print(self.current_task)
+            if self.total_time_counter == 0:
+                self.total_time_counter = new_task.get_sim_time()
+                #print(self.total_time_counter, new_task.get_request_process_time(), last_execution_time)
+            else:
+                self.total_time_counter = self.total_time_counter +  last_execution_time
+                #print(self.total_time_counter, new_task.get_request_process_time(), last_execution_time)
+            new_task.end_time = self.total_time_counter
+            self.current_task = None
 
     def busy(self):
         if self.current_task != None:
@@ -41,63 +48,117 @@ class Server:
 
     def start_next(self,new_task):
         self.current_task = new_task
-        #self.time_remaining = new_task.get_pages() * 60 / self.process_time
-        self.time_remaining = new_task.get_process_time()
 
 class Request:
-    # A single Server request
     def __init__(self, request):
         self.simulation_time = request[0]
         self.file_to_get = request[1]
         self.process_time = request[2]
+        self.end_time = 0
 
-    def get_stamp(self):
-        return self.timestamp
+    def get_sim_time(self):
+        return self.simulation_time
 
-    def get_process_time(self):
-        print(f"process time is {self.process_time}")
+    def get_request_process_time(self):
         return self.process_time
 
-    def wait_time(self, current_time):
-        #return current_time - self.simulation_time
-        return 0
+    def wait_time(self):
+        elapsed_time = self.end_time - self.simulation_time
+        return int(elapsed_time)
 
-def simulateOneServer(input_file_name):
-    '''
-    The simulateOneServer() function is responsible for printing out the average wait time for a request (i.e.,
-how long, on average, did a request stay in the server queue before being processed). The simulate function
-should return this average.
-    for line in open('./source.txt'):
-        print line
-    '''
-    #7, /images/test.gif, 1
-    requests = [ [7, '/images/test.gif', 1], [8, '/faart/burp.gif', 10], [8, '/eat/shit.jpg', 2] ]
+def simulateOneServer(data):
     one_server = Server()
-    waiting_times = []
     server_queue = Queue()
-    for client_request in requests:
-        request_object = Request(client_request)
-        # 7, 1 sec to process
-        server_queue.enqueue(request_object)
-        print(f"Is the server busy? --> {one_server.busy()}")
-        print(f"Is the Queue empty? --> {server_queue.is_empty()}")
-        if (not one_server.busy()): # and (not server_queue.is_empty()):
-            next_task = server_queue.dequeue()
-            waiting_times.append(next_task.wait_time(client_request[0]))
-            print(f"Working on {client_request[1]}")
-            one_server.start_next(next_task)
-        else:
-            print(f'fng busy brah Server:{one_server.busy()} Queue:{server_queue.is_empty()}')
+    waiting_times = []
+    last_task = None
+    for client_request in data:
+        int_client_request = []
+        int_client_request.append(int(client_request[0]))
+        int_client_request.append(client_request[1])
+        int_client_request.append(int(client_request[2]))
+        request_object = Request(int_client_request)
 
-        while one_server.time_remaining > 0:
-            one_server.tick()
+        server_queue.enqueue(request_object)
+        #print(f"Is the server busy? --> {one_server.busy()}")
+        #print(f"Is the Queue empty? --> {server_queue.is_empty()}")
+        #print(f"Size of q is --> {server_queue.size()}")
+
+        if (not one_server.busy())  and (not server_queue.is_empty()):
+            if last_task == None:
+                last_execution_time = 0
+            else:
+                last_execution_time = last_task.get_request_process_time()
+            next_task = server_queue.dequeue()
+            one_server.start_next(next_task)
+            #one_server.tick()
+            one_server.work(next_task, last_execution_time)
+            #print(f"Total time-->{one_server.get_total_time_counter()}.  request time--> {next_task.get_sim_time()}")
+            print("Request object lived this long %6.2f" %(one_server.get_total_time_counter() - next_task.get_sim_time()))
+            waiting_times.append(next_task.wait_time())
+            last_task = next_task
+
     average_wait = sum(waiting_times) / len(waiting_times)
     print("Average Wait %6.2f secs %3d tasks remaining."
     %(average_wait, server_queue.size()))
 
+def simulateManyServers(num_servers, data):
+    waiting_times = []
+    last_task = None
+    server_objects = []
+    for server in num_servers:
+        s = Server()
+        server_objects.append(s)
+    q_objects = []
+    for q in num_servers:
+        q = Queue()
+        q_objects.append(q)
+
+    for client_request in data:
+        counter = 0
+        int_client_request = []
+        int_client_request.append(int(client_request[0]))
+        int_client_request.append(client_request[1])
+        int_client_request.append(int(client_request[2]))
+        request_object = Request(int_client_request)
+
+        if counter == len(server_objects):
+            counter = 0
+        q_objects[counter].enqueue(request_object)
+        if (not server_objects[counter].busy())  and (not q_objects[counter].is_empty()):
+            if last_task == None:
+                last_execution_time = 0
+            else:
+                last_execution_time = last_task.get_request_process_time()
+            next_task = q_objects[counter].dequeue()
+            server_objects[counter].start_next(next_task)
+            #one_server.tick()
+            server_objects[counter].work(next_task, last_execution_time)
+            #print(f"Total time-->{server_objects[counter].get_total_time_counter()}.  request time--> {next_task.get_sim_time()}")
+            print("Request object lived this long %6.2f" %(server_objects[counter].get_total_time_counter() - next_task.get_sim_time()))
+            waiting_times.append(next_task.wait_time())
+            last_task = next_task
+        counter+=1
+
+    size = 0
+    for q in q_objects:
+        size = size + q.size()
+    average_wait = sum(waiting_times) / len(waiting_times)
+    print("Average Wait %6.2f secs %3d tasks remaining."
+    %(average_wait, size))
+
+
 def main():
-    # TODO add argparse to point to file
-    simulateOneServer('./source.txt')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--url', required=True)
+    parser.add_argument('--servers')
+    args = parser.parse_args()
+    csvstream = urllib.request.urlopen(args.url)
+    csv_data = csv.reader(codecs.iterdecode(csvstream, 'utf-8'))
+    data = list(csv_data)
+    if args.servers:
+        simulateManyServers(args.servers, data)
+    else:
+        simulateOneServer(data)
 
 if __name__ == '__main__':
     main()
