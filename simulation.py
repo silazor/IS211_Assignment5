@@ -79,10 +79,6 @@ def simulateOneServer(data):
         request_object = Request(int_client_request)
 
         server_queue.enqueue(request_object)
-        #print(f"Is the server busy? --> {one_server.busy()}")
-        #print(f"Is the Queue empty? --> {server_queue.is_empty()}")
-        #print(f"Size of q is --> {server_queue.size()}")
-
         if (not one_server.busy())  and (not server_queue.is_empty()):
             if last_task == None:
                 last_execution_time = 0
@@ -90,7 +86,6 @@ def simulateOneServer(data):
                 last_execution_time = last_task.get_request_process_time()
             next_task = server_queue.dequeue()
             one_server.start_next(next_task)
-            #one_server.tick()
             one_server.work(next_task, last_execution_time)
             #print(f"Total time-->{one_server.get_total_time_counter()}.  request time--> {next_task.get_sim_time()}")
             print("Request object lived this long %6.2f" %(one_server.get_total_time_counter() - next_task.get_sim_time()))
@@ -131,7 +126,6 @@ def simulateManyServers(num_servers, data):
                 last_execution_time = last_task.get_request_process_time()
             next_task = q_objects[counter].dequeue()
             server_objects[counter].start_next(next_task)
-            #one_server.tick()
             server_objects[counter].work(next_task, last_execution_time)
             #print(f"Total time-->{server_objects[counter].get_total_time_counter()}.  request time--> {next_task.get_sim_time()}")
             print("Request object lived this long %6.2f" %(server_objects[counter].get_total_time_counter() - next_task.get_sim_time()))
